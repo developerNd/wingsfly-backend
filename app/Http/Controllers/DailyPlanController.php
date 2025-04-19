@@ -21,7 +21,7 @@ class DailyPlanController extends Controller
         $date = $request->get('date');
         if ($date) {
             $date = Carbon::parse($date);
-            $query->whereDate('date', $date);
+            $query->whereDate('start_date', $date);
         }
 
         $plans = $query->get();
