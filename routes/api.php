@@ -1,7 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\DailyplanController;
+use App\Http\Controllers\DailyPlanController;
 use App\Http\Controllers\GoogleAuthController;
 use App\Http\Controllers\RecurringGoalController;
 use App\Http\Controllers\UserController;
