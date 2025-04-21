@@ -21,7 +21,52 @@ class DailyPlanController extends Controller
         $date = $request->get('date');
         if ($date) {
             $date = Carbon::parse($date);
-            $query->whereDate('start_date', $date);
+            
+            // Base query for tasks that should appear on this date
+            $query->where(function($q) use ($date) {
+                // Tasks that start on or before this date
+                $q->where('start_date', '<=', $date);
+                
+                // And either have no end date or end after this date
+                $q->where(function($q2) use ($date) {
+                    $q2->whereNull('end_date')
+                        ->orWhere('end_date', '>=', $date);
+                });
+                
+                // Handle repetition patterns
+                $q->where(function($q3) use ($date) {
+                    // Daily repetition
+                    $q3->where('frequency', 'every-day')
+                        // Weekly repetition on same day of week
+                        ->orWhere(function($q4) use ($date) {
+                            $q4->where('frequency', 'specific-days-week')
+                                ->whereJsonContains('selected_days', $date->dayOfWeek);
+                        })
+                        // Monthly repetition on same day of month
+                        ->orWhere(function($q5) use ($date) {
+                            $q5->where('frequency', 'specific-days-month')
+                                ->whereJsonContains('selected_days', $date->day);
+                        })
+                        // Yearly repetition on same day of year
+                        ->orWhere(function($q6) use ($date) {
+                            $q6->where('frequency', 'specific-days-year')
+                                ->whereJsonContains('selected_days', $date->dayOfYear);
+                        })
+                        // Some days period (handle this based on your specific requirements)
+                        ->orWhere(function($q7) use ($date) {
+                            $q7->where('frequency', 'some-days-period');
+                            // Add logic for some-days-period if needed
+                        })
+                        // Repeat (handle this based on your specific requirements)
+                        ->orWhere(function($q8) use ($date) {
+                            $q8->where('frequency', 'repeat');
+                            // Add logic for repeat if needed
+                        });
+                });
+            });
+            
+            // Handle flexible timing
+            $query->orWhere('is_flexible', true);
         }
 
         $plans = $query->get();
@@ -50,8 +95,8 @@ class DailyPlanController extends Controller
             'duration' => 'nullable|integer',
             'priority' => 'required|in:Must,Should,Could,Would,Important',
             'block_time' => 'nullable|integer',
-            'block_start_time' => 'required|date_format:h:i A',
-            'block_end_time' => 'required|date_format:h:i A',
+            'block_start_time' => 'nullable|date_format:h:i A',
+            'block_end_time' => 'nullable|date_format:h:i A',
             'pomodoro' => 'required|integer',
             'reminder' => 'required|boolean',
             'reminder_time' => 'required_if:reminder,true|date_format:H:i',
