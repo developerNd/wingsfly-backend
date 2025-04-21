@@ -55,6 +55,7 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // Route for updating task completion status
     Route::put('/daily-plans/{id}/completion-status', [DailyPlanController::class, 'updateTaskCompletionStatus']);
+    // Route for updating task completion status
+    Route::put('/daily-plans/{id}/checklist-items/{itemId}/toggle', [DailyPlanController::class, 'toggleChecklistItem']);
 });
-
 // ... existing code ...

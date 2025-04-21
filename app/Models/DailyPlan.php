@@ -23,7 +23,8 @@ class DailyPlan extends Model
         'duration',
         'priority',
         'block_time',
-        'pomodoro'
+        'pomodoro',
+        'checklist_items'
     ];
 
     protected $casts = [
@@ -32,8 +33,9 @@ class DailyPlan extends Model
         'start_date' => 'date',
         'end_date' => 'date',
         'duration' => 'integer',
-        'block_time' => 'integer',
-        'pomodoro' => 'integer'
+        'block_time' => 'array',
+        'pomodoro' => 'integer',
+        'checklist_items' => 'array'
     ];
 
     public function reminder(): HasOne

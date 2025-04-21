@@ -49,7 +49,9 @@ class DailyPlanController extends Controller
             'end_date' => 'nullable|date',
             'duration' => 'nullable|integer',
             'priority' => 'required|in:Must,Should,Could,Would,Important',
-            'block_time' => 'required|integer',
+            'block_time' => 'nullable|integer',
+            'block_start_time' => 'required|date_format:h:i A',
+            'block_end_time' => 'required|date_format:h:i A',
             'pomodoro' => 'required|integer',
             'reminder' => 'required|boolean',
             'reminder_time' => 'required_if:reminder,true|date_format:H:i',
@@ -57,7 +59,8 @@ class DailyPlanController extends Controller
             'reminder_schedule' => 'required_if:reminder,true|in:always-enabled,specific-days,days-before',
             'selected_week_days' => 'required_if:reminder_schedule,specific-days|array',
             'days_before_count' => 'required_if:reminder_schedule,days-before|integer',
-            'hours_before_count' => 'nullable|integer'
+            'hours_before_count' => 'nullable|integer',
+            'checklist_items' => 'nullable|array'
         ]);
 
         if ($validator->fails()) {
@@ -82,8 +85,12 @@ class DailyPlanController extends Controller
                 'end_date' => $request->end_date,
                 'duration' => $request->duration,
                 'priority' => $request->priority,
-                'block_time' => $request->block_time,
-                'pomodoro' => $request->pomodoro
+                'block_time' => [
+                    'start_time' => $request->block_start_time,
+                    'end_time' => $request->block_end_time
+                ],
+                'pomodoro' => $request->pomodoro,
+                'checklist_items' => $request->checklist_items
             ]);
 
             if ($request->reminder) {
@@ -171,6 +178,43 @@ class DailyPlanController extends Controller
 
         return response()->json([
             'message' => 'Task completion status updated successfully',
+            'data' => $dailyPlan
+        ]);
+    }
+
+    public function toggleChecklistItem(Request $request, $id, $itemId)
+    {
+        Log::info('DailyplanController@toggleChecklistItem', ['request' => $request->all(), 'id' => $id, 'itemId' => $itemId]);
+        
+        $dailyPlan = DailyPlan::where('user_id', Auth::id())->findOrFail($id);
+        
+        // Get the checklist items
+        $checklistItems = $dailyPlan->checklist_items ?? [];
+        
+        // Find the item with the specified ID
+        $itemFound = false;
+        foreach ($checklistItems as $key => $item) {
+            if ($item['id'] === $itemId) {
+                // Toggle the completed status
+                $checklistItems[$key]['completed'] = !$item['completed'];
+                $itemFound = true;
+                break;
+            }
+        }
+        
+        if (!$itemFound) {
+            return response()->json([
+                'message' => 'Checklist item not found',
+                'status' => 'error'
+            ], 404);
+        }
+        
+        // Update the checklist items
+        $dailyPlan->checklist_items = $checklistItems;
+        $dailyPlan->save();
+        
+        return response()->json([
+            'message' => 'Checklist item toggled successfully',
             'data' => $dailyPlan
         ]);
     }
