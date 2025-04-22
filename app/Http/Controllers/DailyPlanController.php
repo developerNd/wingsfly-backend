@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\DailyPlan;
 use App\Models\DailyPlanReminder;
+use App\Models\DailyPlanCompletion;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -15,7 +16,7 @@ class DailyPlanController extends Controller
 {
     public function index(Request $request)
     {
-        $query = DailyPlan::query();
+        $query = DailyPlan::where('user_id', Auth::id());
 
         // Get date from request
         $date = $request->get('date');
@@ -70,6 +71,30 @@ class DailyPlanController extends Controller
         }
 
         $plans = $query->get();
+        
+        // Add completion status for the requested date
+        if ($date) {
+            $completionDate = $date->format('Y-m-d');
+            
+            foreach ($plans as $plan) {
+                $completion = DailyPlanCompletion::where('daily_plan_id', $plan->id)
+                    ->where('completion_date', $completionDate)
+                    ->first();
+                
+                // Update the existing isCompleted field instead of adding a new is_completed field
+                $plan->isCompleted = $completion ? $completion->is_completed : false;
+                
+                // If the plan has checklist items, add their completion status
+                if ($plan->checklist_items && $completion && $completion->checklist_completions) {
+                    foreach ($plan->checklist_items as $key => $item) {
+                        $itemId = $item['id'];
+                        $plan->checklist_items[$key]['completed'] = 
+                            isset($completion->checklist_completions[$itemId]) ? 
+                            $completion->checklist_completions[$itemId] : false;
+                    }
+                }
+            }
+        }
 
         return response()->json([
             'status' => 'success',
@@ -199,7 +224,7 @@ class DailyPlanController extends Controller
         
         $validator = Validator::make($request->all(), [
             'completed' => 'required|boolean',
-            // 'date' => 'required|date',
+            'date' => 'nullable|date'
         ]);
 
         if ($validator->fails()) {
@@ -208,17 +233,39 @@ class DailyPlanController extends Controller
 
         $dailyPlan = DailyPlan::where('user_id', Auth::id())->findOrFail($id);
         
-        // Get the current completion status or initialize if not exists
-        // $completionStatus = $dailyPlan->completion_status ?? [];
+        // Get the date from the request or use today
+        $date = $request->has('date') ? Carbon::parse($request->date) : Carbon::today();
+        $dateString = $date->format('Y-m-d');
         
-        // Format the date as Y-m-d
-        // $formattedDate = date('Y-m-d', strtotime($request->date));
+        // Get or create a completion record for the specified date
+        $completion = DailyPlanCompletion::firstOrCreate(
+            [
+                'daily_plan_id' => $dailyPlan->id,
+                'user_id' => Auth::id(),
+                'completion_date' => $dateString
+            ],
+            [
+                'is_completed' => false,
+                'checklist_completions' => []
+            ]
+        );
         
-        // // Update the completion status for the specified date
-        // $completionStatus[$formattedDate] = $request->completed;
+        // Update the completion status
+        $completion->is_completed = $request->completed;
         
-        // Update the daily plan with the new completion status
-        $dailyPlan->isCompleted = true;
+        // If marking as completed, also mark all checklist items as completed
+        if ($request->completed && $dailyPlan->checklist_items) {
+            $checklistCompletions = [];
+            foreach ($dailyPlan->checklist_items as $item) {
+                $checklistCompletions[$item['id']] = true;
+            }
+            $completion->checklist_completions = $checklistCompletions;
+        }
+        
+        $completion->save();
+        
+        // Also update the isCompleted field in the daily_plans table
+        $dailyPlan->isCompleted = $request->completed;
         $dailyPlan->save();
 
         return response()->json([
@@ -238,10 +285,10 @@ class DailyPlanController extends Controller
         
         // Find the item with the specified ID
         $itemFound = false;
+        $itemIndex = -1;
         foreach ($checklistItems as $key => $item) {
             if ($item['id'] === $itemId) {
-                // Toggle the completed status
-                $checklistItems[$key]['completed'] = !$item['completed'];
+                $itemIndex = $key;
                 $itemFound = true;
                 break;
             }
@@ -254,12 +301,104 @@ class DailyPlanController extends Controller
             ], 404);
         }
         
-        // Update the checklist items
+        // Get or create a completion record for today
+        $today = Carbon::today()->format('Y-m-d');
+        $completion = DailyPlanCompletion::firstOrCreate(
+            [
+                'daily_plan_id' => $dailyPlan->id,
+                'user_id' => Auth::id(),
+                'completion_date' => $today
+            ],
+            [
+                'is_completed' => false,
+                'checklist_completions' => []
+            ]
+        );
+        
+        // Toggle the completion status for this item
+        $checklistCompletions = $completion->checklist_completions ?? [];
+        $currentStatus = $checklistItems[$itemIndex]['completed'];
+        $checklistCompletions[$itemId] = !$currentStatus;
+        
+        // Update the completion record
+        $completion->checklist_completions = $checklistCompletions;
+        
+        // Check if all items are completed
+        $allCompleted = true;
+        foreach ($checklistItems as $item) {
+            $itemId = $item['id'];
+            if (!isset($checklistCompletions[$itemId]) || !$checklistCompletions[$itemId]) {
+                $allCompleted = false;
+                break;
+            }
+        }
+        
+        // Update the overall completion status
+        $completion->is_completed = $allCompleted;
+        $completion->save();
+        
+        // Update the checklist item in the response
+        $checklistItems[$itemIndex]['completed'] = !$currentStatus;
         $dailyPlan->checklist_items = $checklistItems;
+        
+        // Also update the isCompleted field in the daily_plans table
+        $dailyPlan->isCompleted = $allCompleted;
         $dailyPlan->save();
         
         return response()->json([
             'message' => 'Checklist item toggled successfully',
+            'data' => $dailyPlan
+        ]);
+    }
+
+    public function toggleCompletionStatus(Request $request, $id)
+    {
+        Log::info('DailyplanController@toggleCompletionStatus', ['request' => $request->all(), 'id' => $id]);
+        
+        $validator = Validator::make($request->all(), [
+            'completed' => 'required|boolean',
+            'date' => 'nullable|date'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+        
+        $dailyPlan = DailyPlan::where('user_id', Auth::id())->findOrFail($id);
+        
+        // Get the date from the request or use today
+        $date = $request->has('date') ? Carbon::parse($request->date) : Carbon::today();
+        $dateString = $date->format('Y-m-d');
+        
+        // Get or create a completion record for the specified date
+        $completion = DailyPlanCompletion::firstOrCreate(
+            [
+                'daily_plan_id' => $dailyPlan->id,
+                'user_id' => Auth::id(),
+                'completion_date' => $dateString
+            ],
+            [
+                'is_completed' => false,
+                'checklist_completions' => []
+            ]
+        );
+        
+        // Toggle the completion status
+        $completion->is_completed = $request->completed;
+        
+        // If marking as completed, also mark all checklist items as completed
+        if ($request->completed && $dailyPlan->checklist_items) {
+            $checklistCompletions = [];
+            foreach ($dailyPlan->checklist_items as $item) {
+                $checklistCompletions[$item['id']] = true;
+            }
+            $completion->checklist_completions = $checklistCompletions;
+        }
+        
+        $completion->save();
+        
+        return response()->json([
+            'message' => 'Completion status updated successfully',
             'data' => $dailyPlan
         ]);
     }

@@ -27,7 +27,7 @@ return new class extends Migration
             $table->integer('block_time')->default(0);
             $table->integer('pomodoro')->default(0);
             $table->boolean('reminder')->default(false);
-            $table->boolean('completion_status')->default(0);
+            $table->boolean('isCompleted')->default(0);
             $table->timestamps();
         });
 

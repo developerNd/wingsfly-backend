@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class DailyPlan extends Model
 {
@@ -41,6 +42,11 @@ class DailyPlan extends Model
     public function reminder(): HasOne
     {
         return $this->hasOne(DailyPlanReminder::class);
+    }
+
+    public function completions(): HasMany
+    {
+        return $this->hasMany(DailyPlanCompletion::class);
     }
 }
 
