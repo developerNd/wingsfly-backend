@@ -14,6 +14,9 @@ class DailyPlan extends Model
         'task_type',
         'gender',
         'evaluation_type',
+        'numeric_condition',
+        'numeric_value',
+        'numeric_unit',
         'habit',
         'description',
         'frequency',
@@ -25,7 +28,15 @@ class DailyPlan extends Model
         'priority',
         'block_time',
         'pomodoro',
-        'checklist_items'
+        'checklist_items',
+        'additional_data',
+        'repetition_data',
+        'target',
+        'selected_unit',
+        'add_to_calendar',
+        'add_reminder',
+        'add_pomodoro',
+        'status'
     ];
 
     protected $casts = [
@@ -36,7 +47,12 @@ class DailyPlan extends Model
         'duration' => 'integer',
         'block_time' => 'array',
         'pomodoro' => 'integer',
-        'checklist_items' => 'array'
+        'checklist_items' => 'array',
+        'additional_data' => 'array',
+        'repetition_data' => 'array',
+        'add_to_calendar' => 'boolean',
+        'add_reminder' => 'boolean',
+        'add_pomodoro' => 'boolean'
     ];
 
     public function reminder(): HasOne
